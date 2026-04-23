@@ -80,7 +80,9 @@ async def send_to_channels(client, channels, msg, suffix):
 
 async def run_client(session_str, channels, suffix, source_entity=None):
     client = TelegramClient(StringSession(session_str), API_ID, API_HASH)
-    await client.start()
+    await client.connect()
+    if not await client.is_user_authorized():
+        raise RuntimeError('Session not authorized! Re-generate StringSession.')
     print(f'Клиент запущен: {(await client.get_me()).first_name}')
 
     if source_entity is None:
