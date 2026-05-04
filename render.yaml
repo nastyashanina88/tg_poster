@@ -1,0 +1,27 @@
+services:
+  - type: web
+    name: tg-poster-watch
+    env: python
+    plan: starter
+    buildCommand: pip install -r requirements.txt
+    startCommand: python -u bot.py
+    healthCheckPath: /
+    envVars:
+      - key: API_ID
+        sync: false
+      - key: API_HASH
+        sync: false
+      - key: SOURCE_CHANNEL
+        sync: false
+      - key: SESSION1
+        sync: false
+      - key: SESSION2
+        sync: false
+      - key: CHANNELS_ACC1
+        sync: false
+      - key: CHANNELS_ACC2
+        sync: false
+      - key: DELAY
+        value: "5"
+      - key: SEND_LATEST_ON_START
+        value: "0"
