@@ -26,6 +26,7 @@ SESSION1 = os.environ["SESSION1"]
 SESSION2 = os.environ["SESSION2"]
 DELAY = int(os.environ.get("DELAY", "5"))
 SEND_LATEST_ON_START = os.environ.get("SEND_LATEST_ON_START", "0") == "1"
+STARTUP_DELAY = int(os.environ.get("STARTUP_DELAY", "45"))
 MANUAL_DAILY_ENABLED = os.environ.get("MANUAL_DAILY_ENABLED", "0") == "1"
 MANUAL_MEDIA_PATH = os.environ.get("MANUAL_MEDIA_PATH", "manual_posts/post_daily.png")
 MANUAL_CAPTION = os.environ.get(
@@ -251,6 +252,9 @@ def start_health_server():
 
 async def main():
     threading.Thread(target=start_health_server, daemon=True).start()
+    if STARTUP_DELAY > 0:
+        print(f"Startup delay {STARTUP_DELAY}s before Telegram connect", flush=True)
+        await asyncio.sleep(STARTUP_DELAY)
 
     clients = []
     for account in ACCOUNTS:
