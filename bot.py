@@ -33,6 +33,7 @@ MANUAL_CAPTION = os.environ.get(
     "MANUAL_CAPTION",
     "@awardy_bot\n@awardy_bot\n@awardy_bot\n@awardy_bot\n@awardy_bot",
 )
+MANUAL_CATCHUP_WINDOW_MINUTES = int(os.environ.get("MANUAL_CATCHUP_WINDOW_MINUTES", "20"))
 MSK = timezone(timedelta(hours=3))
 SENT_MARKER_PATH = Path(os.environ.get("SENT_MARKER_PATH", "/tmp/tg_poster_manual_sent.json"))
 
@@ -207,6 +208,11 @@ async def run_due_manual_tasks(clients, markers, now):
                 continue
             key = f"{day}:{account['name']}:{minute}"
             if key in markers:
+                continue
+            if current_minutes - scheduled_minutes > MANUAL_CATCHUP_WINDOW_MINUTES:
+                print(f"[{account['name']}] manual skip stale catch-up {key}", flush=True)
+                markers.add(key)
+                save_sent_markers(markers)
                 continue
             due_minutes.append((minute, key))
 
