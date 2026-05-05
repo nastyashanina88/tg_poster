@@ -185,6 +185,38 @@ def save_sent_markers(markers):
     SENT_MARKER_PATH.write_text(json.dumps(sorted(markers)))
 
 
+async def run_due_manual_tasks(clients, markers, now):
+    media_path = Path(MANUAL_MEDIA_PATH)
+    if not media_path.exists():
+        print(f"Manual daily media not found: {media_path}", flush=True)
+        return markers
+
+    schedule = {
+        "my_account": {"09:00", "15:00"},
+        "my_account2": {"11:00", "17:00"},
+    }
+    day = now.strftime("%Y-%m-%d")
+    current_minutes = now.hour * 60 + now.minute
+
+    tasks = []
+    for client, account in clients:
+        for minute in sorted(schedule.get(account["name"], set())):
+            hour, mins = [int(part) for part in minute.split(":")]
+            scheduled_minutes = hour * 60 + mins
+            if scheduled_minutes > current_minutes:
+                continue
+            key = f"{day}:{account['name']}:{minute}"
+            if key in markers:
+                continue
+            markers.add(key)
+            save_sent_markers(markers)
+            tasks.append(send_manual_to_channels(client, account, str(media_path), MANUAL_CAPTION, key))
+
+    if tasks:
+        await asyncio.gather(*tasks)
+    return markers
+
+
 async def manual_daily_scheduler(clients):
     if not MANUAL_DAILY_ENABLED:
         return
@@ -202,23 +234,8 @@ async def manual_daily_scheduler(clients):
 
     while True:
         now = datetime.now(MSK)
-        minute = now.strftime("%H:%M")
-        day = now.strftime("%Y-%m-%d")
         markers = load_sent_markers()
-
-        tasks = []
-        for client, account in clients:
-            if minute not in schedule.get(account["name"], set()):
-                continue
-            key = f"{day}:{account['name']}:{minute}"
-            if key in markers:
-                continue
-            markers.add(key)
-            save_sent_markers(markers)
-            tasks.append(send_manual_to_channels(client, account, str(media_path), MANUAL_CAPTION, key))
-
-        if tasks:
-            await asyncio.gather(*tasks)
+        markers = await run_due_manual_tasks(clients, markers, now)
 
         await asyncio.sleep(30)
 
