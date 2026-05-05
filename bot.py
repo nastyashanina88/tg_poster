@@ -250,6 +250,18 @@ async def connect_account(account):
     return client
 
 
+async def connect_available_accounts():
+    clients = []
+    for account in ACCOUNTS:
+        try:
+            clients.append((await connect_account(account), account))
+        except Exception as exc:
+            print(f"[{account['name']}] connect failed: {type(exc).__name__}: {exc}", flush=True)
+    if not clients:
+        raise RuntimeError("No Telegram accounts connected")
+    return clients
+
+
 class HealthHandler(BaseHTTPRequestHandler):
     def do_GET(self):
         self.send_response(200)
@@ -273,9 +285,7 @@ async def main():
         print(f"Startup delay {STARTUP_DELAY}s before Telegram connect", flush=True)
         await asyncio.sleep(STARTUP_DELAY)
 
-    clients = []
-    for account in ACCOUNTS:
-        clients.append((await connect_account(account), account))
+    clients = await connect_available_accounts()
 
     listener = clients[0][0]
     source_entity = await listener.get_entity(SOURCE_CHANNEL)
