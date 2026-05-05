@@ -198,8 +198,8 @@ async def run_due_manual_tasks(clients, markers, now):
     day = now.strftime("%Y-%m-%d")
     current_minutes = now.hour * 60 + now.minute
 
-    tasks = []
     for client, account in clients:
+        due_minutes = []
         for minute in sorted(schedule.get(account["name"], set())):
             hour, mins = [int(part) for part in minute.split(":")]
             scheduled_minutes = hour * 60 + mins
@@ -208,12 +208,20 @@ async def run_due_manual_tasks(clients, markers, now):
             key = f"{day}:{account['name']}:{minute}"
             if key in markers:
                 continue
+            due_minutes.append((minute, key))
+
+        if not due_minutes:
+            continue
+
+        for minute, key in due_minutes[:-1]:
+            print(f"[{account['name']}] manual skip stale catch-up {key}", flush=True)
             markers.add(key)
             save_sent_markers(markers)
-            tasks.append(send_manual_to_channels(client, account, str(media_path), MANUAL_CAPTION, key))
 
-    if tasks:
-        await asyncio.gather(*tasks)
+        minute, key = due_minutes[-1]
+        markers.add(key)
+        save_sent_markers(markers)
+        await send_manual_to_channels(client, account, str(media_path), MANUAL_CAPTION, key)
     return markers
 
 
