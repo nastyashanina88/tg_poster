@@ -26,6 +26,9 @@ SESSION1 = os.environ["SESSION1"]
 SESSION2 = os.environ["SESSION2"]
 DELAY = int(os.environ.get("DELAY", "5"))
 SEND_LATEST_ON_START = os.environ.get("SEND_LATEST_ON_START", "0") == "1"
+SOURCE_CATCHUP_ENABLED = os.environ.get("SOURCE_CATCHUP_ENABLED", "1") == "1"
+SOURCE_CATCHUP_LIMIT = int(os.environ.get("SOURCE_CATCHUP_LIMIT", "5"))
+SOURCE_CATCHUP_WINDOW_MINUTES = int(os.environ.get("SOURCE_CATCHUP_WINDOW_MINUTES", "180"))
 STARTUP_DELAY = int(os.environ.get("STARTUP_DELAY", "45"))
 MANUAL_DAILY_ENABLED = os.environ.get("MANUAL_DAILY_ENABLED", "0") == "1"
 MANUAL_MEDIA_PATH = os.environ.get("MANUAL_MEDIA_PATH", "manual_posts/post_daily.png")
@@ -36,6 +39,7 @@ MANUAL_CAPTION = os.environ.get(
 MANUAL_CATCHUP_WINDOW_MINUTES = int(os.environ.get("MANUAL_CATCHUP_WINDOW_MINUTES", "20"))
 MSK = timezone(timedelta(hours=3))
 SENT_MARKER_PATH = Path(os.environ.get("SENT_MARKER_PATH", "/tmp/tg_poster_manual_sent.json"))
+SOURCE_MARKER_PATH = Path(os.environ.get("SOURCE_MARKER_PATH", "/tmp/tg_poster_source_sent.json"))
 
 
 def load_channels(env_name):
@@ -186,6 +190,17 @@ def save_sent_markers(markers):
     SENT_MARKER_PATH.write_text(json.dumps(sorted(markers)))
 
 
+def load_source_markers():
+    try:
+        return set(json.loads(SOURCE_MARKER_PATH.read_text()))
+    except Exception:
+        return set()
+
+
+def save_source_markers(markers):
+    SOURCE_MARKER_PATH.write_text(json.dumps(sorted(markers)))
+
+
 async def run_due_manual_tasks(clients, markers, now):
     media_path = Path(MANUAL_MEDIA_PATH)
     if not media_path.exists():
@@ -303,12 +318,14 @@ async def main():
 
     listener = clients[0][0]
     source_entity = await listener.get_entity(SOURCE_CHANNEL)
-    processed = set()
+    processed = load_source_markers()
 
     async def handle_post(msg):
-        if msg.id in processed:
+        key = str(msg.id)
+        if key in processed:
             return
-        processed.add(msg.id)
+        processed.add(key)
+        save_source_markers(processed)
         preview = (msg.text or msg.message or "").replace("\n", " ")[:100]
         print(f"New post id={msg.id}: {preview}", flush=True)
         await asyncio.gather(
@@ -324,6 +341,18 @@ async def main():
         latest = await listener.get_messages(SOURCE_CHANNEL, limit=1)
         if latest:
             await handle_post(latest[0])
+
+    if SOURCE_CATCHUP_ENABLED:
+        cutoff = datetime.now(timezone.utc) - timedelta(minutes=SOURCE_CATCHUP_WINDOW_MINUTES)
+        recent = await listener.get_messages(SOURCE_CHANNEL, limit=SOURCE_CATCHUP_LIMIT)
+        catchup_posts = [msg for msg in reversed(recent) if msg.date and msg.date >= cutoff]
+        print(
+            f"Source catch-up enabled: last {SOURCE_CATCHUP_LIMIT}, "
+            f"window {SOURCE_CATCHUP_WINDOW_MINUTES}m, due {len(catchup_posts)}",
+            flush=True,
+        )
+        for msg in catchup_posts:
+            await handle_post(msg)
 
     print(f"Watching source: {SOURCE_CHANNEL}", flush=True)
     await asyncio.gather(
